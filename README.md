@@ -1,202 +1,164 @@
 # Calvin Nguyen Resume Website
 
-COMP 4964 individual continuous delivery assignment. A responsive resume website with a GitHub → AWS CodePipeline → CodeBuild → S3 deployment workflow.
+COMP 4964 individual assignment: a resume website automatically deployed from GitHub to Amazon S3 using AWS CodePipeline and CodeBuild.
 
-## Current status
+[Live website](http://calvin-resume-4964.s3-website-us-west-2.amazonaws.com) · [GitHub repository](https://github.com/cnguyen50/COMP4964-Resume-Pipeline)
 
-The website, build script, automated checks, and documentation are prepared. Local checks have passed. AWS resources, GitHub connection, automatic triggering, and live deployment must still be configured and verified. Update this status after completing the cloud setup.
+## Features
 
-## Architecture
+| Feature | Status |
+| --- | --- |
+| Responsive resume website and PDF | Complete |
+| GitHub repository and `.gitignore` | Complete |
+| Source, Build, and Deploy stages | Complete |
+| Automatic deployment after a push to `main` | Verified |
+| Automated testing | Optional, skipped |
+| Monitoring, logging, and alarms | Optional, skipped |
+| Video presentation and AWS cleanup | Pending |
+
+The website uses HTTP. Chrome may warn when downloading the PDF. CloudFront and website HTTPS are not configured.
+
+## Pipeline architecture
 
 ```mermaid
 flowchart TD
-    A[Push to GitHub main] --> B[CodePipeline source action]
-    B --> C[CodeBuild automated checks]
-    C --> D[CodeBuild packages dist]
-    D --> E[CodePipeline S3 deploy action]
-    E --> F[S3 resume website]
-    C --> G[CloudWatch build logs]
+    A[Push to GitHub main] --> B[CodePipeline Source]
+    B -->|SourceArtifact| C[CodeBuild packages website]
+    C -->|BuildArtifact| D[S3 Deploy]
+    D --> E[Live resume website]
 ```
 
-CodePipeline coordinates three stages: Source, Build and Test, and Deploy. Automated checks run in CodeBuild's pre_build phase; a failing check aborts the build. The build copies the website into a clean `dist/` directory. CodeBuild uploads that directory as the build output artifact. The S3 deploy action extracts this artifact into the hosting bucket. CodePipeline's private artifact bucket is separate from the public website bucket.
-
-The initial architecture uses an S3 static website endpoint, which supports HTTP. CloudFront and HTTPS can be added later, but are not included in this setup. There is no application server, database, or custom domain requirement.
+CodeBuild reads `buildspec.yml` and runs `scripts/build.py`. The script copies `site/` into a clean `dist/` folder. The deployment action extracts that build output into the S3 website bucket.
 
 ## Project files
 
-```text
-site/
-  index.html
-  styles.css
-  assets/Calvin-Nguyen-Resume.pdf
-scripts/build.py
-tests/test_site.py
-buildspec.yml
-.gitignore
-README.md
-```
+| Path | Purpose |
+| --- | --- |
+| `site/index.html` | Resume content |
+| `site/styles.css` | Website styling |
+| `site/assets/Calvin-Nguyen-Resume.pdf` | Resume PDF |
+| `scripts/build.py` | Creates the `dist/` deployment folder |
+| `buildspec.yml` | CodeBuild commands and output configuration |
+| `.gitignore` | Excludes generated files and local settings |
 
-Only the contents of `site/` are deployed. Documentation, tests, and build configuration stay in GitHub. Python 3.9 or newer is required. The project uses only the Python standard library and has no package installation step.
+Only the contents of `site/` are deployed. Any starter tests remaining in the repository are not run by the pipeline.
 
-## 1. Preview locally
+## Setup
 
-Extract the project and open `site/index.html` in your browser. No server is required for the resume page. Alternatively, from the project root:
+Use **US West Oregon (`us-west-2`)** for all AWS resources.
 
-```bash
-python3 -m http.server 8000 --directory site
-```
+### 1. GitHub
 
-Open http://localhost:8000. On Windows, use `py` instead of `python3` if that is your installed Python launcher.
+Commit the project to `cnguyen50/COMP4964-Resume-Pipeline` on branch `main`. Keep `buildspec.yml` and `README.md` at the repository root. The generated `dist/` folder is ignored by Git.
 
-Run the checks and build:
+### 2. S3 website
 
-```bash
-python3 -m unittest discover -s tests -v
-python3 scripts/build.py
-```
+Create `calvin-resume-4964` with ACLs disabled, versioning disabled, and SSE-S3 encryption. To reproduce this setup, choose a different globally unique bucket name.
 
-The seven automated checks cover required resume sections, internal navigation, local asset availability, unique IDs and the main heading, the mobile viewport declaration, the PDF download, and exact build output contents. These are structural checks, not a browser rendering test or a full accessibility audit.
-
-## 2. Create the GitHub repository
-
-Create an empty GitHub repository named `COMP4964-Resume-Pipeline`. Do not initialize it with a README or .gitignore, because both are already included. From the extracted project folder:
-
-```bash
-git init -b main
-git add .
-git commit -m "Add resume website and AWS pipeline configuration"
-git remote add origin https://github.com/cnguyen50/COMP4964-Resume-Pipeline.git
-git push -u origin main
-```
-
-If you choose a different repository name, use its actual remote URL. Verify that `site`, `scripts`, `tests`, `README.md`, `buildspec.yml`, and `.gitignore` are present on GitHub. The generated `dist/` folder should not be committed.
-
-## 3. Create the S3 website bucket
-
-Use one AWS Region consistently for the pipeline, build project, and website bucket. Create a general-purpose bucket with a globally unique name. Keep ACLs disabled using Bucket owner enforced.
-
-In bucket Properties, enable Static website hosting, choose Host a static website, and set the index document to `index.html`. An error document is not required for this single-page site.
-
-For this hosting approach, the website files need public read access. In Permissions, adjust Block Public Access for this website bucket to allow a public bucket policy. Account-level or organization restrictions may also block public access. Keep the separate pipeline artifact bucket private. Do not grant public write or public list access.
-
-Add this bucket policy, replacing `YOUR-WEBSITE-BUCKET` with the actual bucket name:
+1. Enable **Static website hosting** and set the index document to `index.html`.
+2. Keep the two ACL-related Block Public Access settings enabled. Disable the two public-policy blocking settings for this bucket.
+3. Add a public read bucket policy:
 
 ```json
 {
   "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "PublicReadWebsiteFiles",
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::YOUR-WEBSITE-BUCKET/*"
-    }
-  ]
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": "*",
+    "Action": "s3:GetObject",
+    "Resource": "arn:aws:s3:::calvin-resume-4964/*"
+  }]
 }
 ```
 
-Save the website endpoint shown in Properties. Use that HTTP endpoint to view the website after deployment, not the S3 REST object URL. The website contains the resume and contact details intended for public viewing.
+Use the website endpoint from **Properties → Static website hosting**. Keep CodePipeline's separate artifact bucket private.
 
-## 4. Create CodePipeline
+### 3. GitHub connection
 
-Create a custom pipeline named `calvin-resume-pipeline`. Review the available pipeline types and current pricing in your AWS account. Let the console create a service role for this pipeline and a private artifact bucket if needed. Use the following stage configuration:
+Create the connection `calvin-resume-github`. Install **AWS Connector for GitHub** on the `cnguyen50` account and grant it access to this repository. Complete the connection setup before selecting it in the pipeline.
 
-| Stage | Provider | Configuration |
-| --- | --- | --- |
-| Source | GitHub via GitHub App / AWS CodeConnections | Connect your account, authorize this repository, select repository and `main`, enable change detection |
-| Build and Test | AWS CodeBuild | Create `calvin-resume-build`, use the source artifact, read root `buildspec.yml` |
-| Deploy | Amazon S3 | Select website bucket, use the **build output artifact**, enable **Extract file before deploy** |
+### 4. CodePipeline
 
-For CodeBuild, choose a currently supported managed Linux standard image with Python 3.9 or newer, on-demand compute, and a small compute size appropriate for a static build. Use EC2 compute with the default shell so `on-failure: ABORT` is supported. Privileged mode and VPC configuration are unnecessary. Create a dedicated CodeBuild service role. When creating it through CodePipeline, use CodePipeline for source and artifact integration.
+Create `calvin-resume-pipeline` with type **V2**, **Superseded** execution mode, a new service role, and the default artifact store and encryption settings.
 
-Use the buildspec file from this repository. Do not add a separate CodeBuild webhook; CodePipeline should receive the GitHub push event and invoke CodeBuild. Enable CloudWatch Logs for build diagnostics. Alarms are optional and are not configured by this project.
+| Stage | Configuration |
+| --- | --- |
+| Source | GitHub via GitHub App, connection `calvin-resume-github`, repository `cnguyen50/COMP4964-Resume-Pipeline`, branch `main`, default ZIP output |
+| Build | CodeBuild project `calvin-resume-build`, input `SourceArtifact`, output `BuildArtifact` |
+| Deploy | Amazon S3, bucket `calvin-resume-4964`, input `BuildArtifact`, blank deployment path, **Extract file before deploy** enabled |
 
-The CodePipeline role needs permission to use the connection, invoke CodeBuild, access its private artifact bucket, and write the deployment objects to the website bucket. The CodeBuild role needs access to the pipeline artifacts and CloudWatch Logs. Let the console create the initial roles, then resolve specific AccessDenied errors by checking the failed action and required resource. Do not grant AdministratorAccess to solve pipeline errors. The website bucket's public read policy does not give the pipeline permission to write.
+Configure **Git Triggers → Push → Include branches: `main`** in the pipeline editor. Skip the optional Test stage.
 
-Create the pipeline and wait for Source, Build and Test, and Deploy to succeed. Open the S3 website endpoint and verify the page, navigation, responsive layout, and PDF download. Record the actual resource names and website URL in your documentation before recording the presentation.
+For CodeBuild, create the project using on-demand EC2 compute, a managed Ubuntu standard container image such as `aws/codebuild/standard:7.0`, and a new service role. Keep privileged mode off and select **Use a buildspec file**. Finish with **Continue to CodePipeline**.
 
-## 5. Verify automatic deployment
+The buildspec is:
 
-1. Open the deployed website and show its current text.
-2. Change the hero phrase `Learning in the cloud.` in `site/index.html`, preserving the surrounding HTML. For example, change `Learning in the <em>cloud.</em>` to `Building in the <em>cloud.</em>`.
-3. Commit and push the change:
+```yaml
+version: 0.2
+
+phases:
+  build:
+    commands:
+      - python3 scripts/build.py
+
+artifacts:
+  base-directory: dist
+  files:
+    - '**/*'
+```
+
+### 5. Permissions
+
+The pipeline role needs access to its artifact bucket, CodeBuild, the GitHub connection, and the website bucket. CodeBuild needs access to the input and output artifacts.
+
+On `AWSCodePipelineServiceRole-us-west-2-calvin-resume-pipeline`, the inline policy `UseResumeGitHubConnection` grants both `codeconnections:UseConnection` and `codestar-connections:UseConnection` for the exact ARN of the new connection. Update this permission whenever the connection changes.
+
+## Updating and demonstrating the website
+
+1. Open `site/index.html` locally to preview the website. Python 3 can also build it with `py scripts/build.py` on Windows, or `python3 scripts/build.py` on macOS/Linux.
+2. Edit a visible heading and save.
+3. Commit and push:
 
 ```bash
 git add site/index.html
-git commit -m "Update resume introduction to demonstrate deployment"
+git commit -m "Update resume website"
 git push
 ```
 
-4. Watch CodePipeline start automatically. Show the source commit and each successful stage.
-5. Refresh the website and show the updated text. Use a hard refresh if the browser cached the previous page.
+4. Watch the new execution start automatically in CodePipeline and confirm its commit ID.
+5. Wait for Source, Build, and Deploy to succeed, then refresh the website with **Ctrl+Shift+R**.
 
-Do not manually upload the changed page to S3 or click Release change as proof of automatic triggering. The demonstration should show the GitHub push starting the execution.
-
-## Presentation checklist
-
-The assignment's submission is your recorded presentation URL. A suggested recording sequence:
-
-1. Introduce the resume website and show its main sections and PDF download.
-2. Explain the architecture: GitHub source, CodePipeline orchestration, CodeBuild tests and packaging, and S3 deployment.
-3. Show `.gitignore`, `buildspec.yml`, the build script, tests, and this README in the repository.
-4. Give the actual completed and not completed feature list. Only claim cloud features after verifying them in your account.
-5. Demonstrate a visible code change, commit, push, automatic pipeline execution, and website update.
-6. Explain troubleshooting, maintenance, and resource cleanup.
-
-Record the deployment evidence before deleting resources. Upload the recording to YouTube or another supported platform and check that the submitted link can be opened by the instructor.
-
-## Feature list to update before recording
-
-| Feature | Prepared locally | Verified on AWS |
-| --- | --- | --- |
-| Responsive resume website and PDF | Yes | Pending |
-| Repository content and .gitignore | Yes | GitHub push pending |
-| Build and packaging | Yes | Pending |
-| Automated structural tests | Yes | Pending |
-| CodePipeline GitHub trigger | Configuration documented | Pending |
-| Automatic S3 deployment | Configuration documented | Pending |
-| Build logs | Configuration documented | Pending |
-| CloudWatch alarms | No | No, optional |
-| CloudFront and HTTPS | No | No, outside initial scope |
-| Documentation | Yes | Update with actual resource details |
-| Video and cleanup | Checklist prepared | Pending |
+For the recording, show the original page, the code change and push, the automatic execution, and the updated page. Also explain the architecture and completed versus skipped features. Upload the video and submit an accessible URL.
 
 ## Maintenance and troubleshooting
 
-Edit files under `site/`, run tests, and push to the tracked branch. Replace the resume PDF at the same asset path when updating it. Keep credentials and local configuration out of Git. If a build fails, fix the change and push a new commit. To roll back content, use `git revert` on the unwanted commit and push the revert.
+Update website files under `site/` and replace the PDF at its existing path. Keep credentials out of Git. To roll back content, use `git revert` and push the revert. Remove obsolete S3 objects separately when deleting or renaming assets, because the S3 deployment action does not delete them.
 
-| Problem | What to check |
+| Problem | Fix |
 | --- | --- |
-| Pipeline does not start | GitHub connection is Available, installation has repository access, tracked branch is `main`, change detection is enabled, and the commit was pushed |
-| Source stage fails | Connection authorization and CodePipeline role permission to use the connection |
-| Build fails | CodeBuild CloudWatch logs, Python availability, root buildspec path, and failing test output |
-| Deploy AccessDenied | CodePipeline role permissions for the website bucket and artifact bucket; check KMS permissions if using a customer-managed key |
-| Website shows AccessDenied | Correct website endpoint, public read bucket policy, and bucket/account Block Public Access settings |
-| Missing index page | `index.html` must be at the bucket root; deploy the build artifact with extraction enabled |
-| PDF or CSS missing | Asset paths are case-sensitive; check test output and deployed object keys |
-| Old page shown | Confirm successful execution for the new commit, check the bucket and endpoint, then hard refresh |
+| CodeBuild project not found | Finish creating `calvin-resume-build` in Oregon and select it in the Build action |
+| Push does not trigger deployment | Check the installed GitHub app, repository access, connection, and Push filter for `main` |
+| Source cannot use the connection | Grant the pipeline role both UseConnection permissions for the current connection ARN |
+| Build fails | Check CodeBuild Phase details, Python availability, and the root buildspec and script paths |
+| Website returns AccessDenied | Check the website endpoint, public read policy, and bucket/account public-access settings |
+| Page or CSS missing | Deploy `BuildArtifact` with extraction enabled and no deployment prefix |
+| Old content appears | Confirm the new commit deployed successfully, then hard refresh |
+| PDF download warning | Known HTTP hosting limitation; HTTPS hosting can address it in a future update |
 
-The standard S3 deploy action overwrites uploaded files but does not delete objects removed from the repository. When removing or renaming assets, remove only the obsolete objects from the website bucket after checking references. Keep index and CSS filenames stable for this assignment.
+During setup, creating the missing build project, installing the GitHub connector, and granting access to the new connection resolved the deployment issues. A commit-triggered execution and live page update were verified afterward.
 
 ## Cleanup
 
-After verifying the recording and preserving the required evidence:
+After recording and checking the video:
 
-1. Delete this assignment's CodePipeline pipeline to prevent future executions.
-2. Delete its CodeBuild project.
-3. Empty and delete the website bucket and the pipeline artifact bucket if dedicated to this assignment. If versioning is enabled, remove object versions and delete markers too.
-4. Delete associated CloudWatch log groups and any optional alarms created for the assignment.
-5. Delete dedicated IAM service roles and policies after checking that other resources do not use them.
-6. Delete the CodeConnections connection only if no other pipeline uses it.
-7. Review AWS Billing and resource lists in the selected Region for remaining assignment resources.
+1. Delete `calvin-resume-pipeline` and `calvin-resume-build`.
+2. Empty and delete `calvin-resume-4964` and the artifact bucket if dedicated to this assignment. Include old object versions and delete markers if present.
+3. Delete dedicated service roles and policies, and remove any assignment log groups created during setup.
+4. Delete `calvin-resume-github` if unused elsewhere. Preserve the shared `Lab8-GitHub` connection and unrelated resources.
+5. Review AWS Billing and remaining resources. Retain the GitHub repository and recording.
 
-This setup creates no EC2 instance, load balancer, RDS database, or CloudFront distribution. If you add any while experimenting, include them in your cleanup. Retain the GitHub repository and video.
+## References
 
-## AWS references
-
-- [GitHub connections](https://docs.aws.amazon.com/codepipeline/latest/userguide/connections-github.html)
+- [CodePipeline GitHub connections and permissions](https://docs.aws.amazon.com/codepipeline/latest/userguide/action-reference-CodestarConnectionSource.html)
 - [CodeBuild buildspec reference](https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html)
-- [S3 deployment action](https://docs.aws.amazon.com/codepipeline/latest/userguide/action-reference-S3Deploy.html)
 - [S3 static website setup](https://docs.aws.amazon.com/AmazonS3/latest/userguide/HostingWebsiteOnS3Setup.html)
-- [S3 website endpoints](https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteEndpoints.html)
