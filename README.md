@@ -14,7 +14,6 @@ COMP 4964 individual assignment: a resume website automatically deployed from Gi
 | Automatic deployment after a push to `main` | Verified |
 | Automated testing | Optional, skipped |
 | Monitoring, logging, and alarms | Optional, skipped |
-| Video presentation and AWS cleanup | Pending |
 
 The website uses HTTP. Chrome may warn when downloading the PDF. CloudFront and website HTTPS are not configured.
 
