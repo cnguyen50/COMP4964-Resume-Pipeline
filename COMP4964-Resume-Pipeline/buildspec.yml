@@ -1,0 +1,16 @@
+version: 0.2
+
+phases:
+  pre_build:
+    on-failure: ABORT
+    commands:
+      - python3 -m unittest discover -s tests -v
+  build:
+    on-failure: ABORT
+    commands:
+      - python3 scripts/build.py
+
+artifacts:
+  base-directory: dist
+  files:
+    - '**/*'
