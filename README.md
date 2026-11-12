@@ -112,23 +112,6 @@ The pipeline role needs access to its artifact bucket, CodeBuild, the GitHub con
 
 On `AWSCodePipelineServiceRole-us-west-2-calvin-resume-pipeline`, the inline policy `UseResumeGitHubConnection` grants both `codeconnections:UseConnection` and `codestar-connections:UseConnection` for the exact ARN of the new connection. Update this permission whenever the connection changes.
 
-## Updating and demonstrating the website
-
-1. Open `site/index.html` locally to preview the website. Python 3 can also build it with `py scripts/build.py` on Windows, or `python3 scripts/build.py` on macOS/Linux.
-2. Edit a visible heading and save.
-3. Commit and push:
-
-```bash
-git add site/index.html
-git commit -m "Update resume website"
-git push
-```
-
-4. Watch the new execution start automatically in CodePipeline and confirm its commit ID.
-5. Wait for Source, Build, and Deploy to succeed, then refresh the website with **Ctrl+Shift+R**.
-
-For the recording, show the original page, the code change and push, the automatic execution, and the updated page. Also explain the architecture and completed versus skipped features. Upload the video and submit an accessible URL.
-
 ## Maintenance and troubleshooting
 
 Update website files under `site/` and replace the PDF at its existing path. Keep credentials out of Git. To roll back content, use `git revert` and push the revert. Remove obsolete S3 objects separately when deleting or renaming assets, because the S3 deployment action does not delete them.
@@ -145,16 +128,6 @@ Update website files under `site/` and replace the PDF at its existing path. Kee
 | PDF download warning | Known HTTP hosting limitation; HTTPS hosting can address it in a future update |
 
 During setup, creating the missing build project, installing the GitHub connector, and granting access to the new connection resolved the deployment issues. A commit-triggered execution and live page update were verified afterward.
-
-## Cleanup
-
-After recording and checking the video:
-
-1. Delete `calvin-resume-pipeline` and `calvin-resume-build`.
-2. Empty and delete `calvin-resume-4964` and the artifact bucket if dedicated to this assignment. Include old object versions and delete markers if present.
-3. Delete dedicated service roles and policies, and remove any assignment log groups created during setup.
-4. Delete `calvin-resume-github` if unused elsewhere. Preserve the shared `Lab8-GitHub` connection and unrelated resources.
-5. Review AWS Billing and remaining resources. Retain the GitHub repository and recording.
 
 ## References
 
